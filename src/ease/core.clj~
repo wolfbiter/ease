@@ -1,0 +1,7 @@
+(ns ease.core
+  (:import (org.jaudiotagger.audio AudioFileIO AudioFile))
+  (:import (java.io File)))
+
+(println (-> (AudioFileIO/read (new File "musics/Guilt.mp3"))
+          .getArtist
+          .getTag))

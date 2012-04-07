@@ -1,0 +1,8 @@
+(ns ease.core
+  (:import (org.jaudiotagger.audio AudioFileIO AudioFile))
+  (:import (org.jaudiotagger.tag FieldKey))
+  (:import (java.io File)))
+
+(println (-> (AudioFileIO/read (new File "musics/Gu ilt.mp3"))
+             .getTag
+             (.getFirst FieldKey/ALBUM)))
