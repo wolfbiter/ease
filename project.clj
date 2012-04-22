@@ -2,7 +2,9 @@
   :description "FIXME: write description"
   :dependencies [[org.clojure/clojure "1.3.0"]
                  [org/jaudiotagger "2.0.1"]
-                 [com.leadtune/clojure-zmq "2.1.0"]]
+                 [com.leadtune/clojure-zmq "2.1.0"]
+                 [congomongo "0.1.8"]
+                 [com.novemberain/monger "1.0.0-SNAPSHOT"]]
   :native-path "/usr/local/lib"
   :dev-dependencies [[swank-clojure "1.3.3"]]
   :main ease.core)
