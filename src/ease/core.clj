@@ -3,7 +3,8 @@
         [monger.collection
          :only [insert insert-batch find-maps remove save any? count]
          :rename {remove del count cnt}]
-        [clojure.set :only [difference intersection]])
+        [clojure.set :only [difference intersection]]
+        [clojure.pprint :only [pprint]])
   (:import (org.jaudiotagger.audio AudioFileIO AudioFile))
   (:import (org.jaudiotagger.audio.mp3 MP3AudioHeader MP3File))
   (:import (org.jaudiotagger.tag FieldKey))
@@ -11,20 +12,19 @@
   (:import (java.io File BufferedReader)))
 
 ;; For ease
-
+ 
 (connect!)
 (set-db! (get-db "ease"))
-(def ex "musics/Guilt.mp3")
+(def ex "musics/mp3/Guilt.mp3")
+(def exo "musics/ogg/Guilt.ogg")
+(def prob "musics/mp3/OpenYourEyes.mp3")
+(def probo "musics/ogg/OpenYourEyes.ogg")
 
-;; ZMQ Ghost functions
-
-(def connection "tcp://*:5555")
-
-(def sock :sock)
+;; ZMQ Ghost Function
 
 (defn send-command [& parts]
   (do (println "Sent command made with args below:")
-      (print (str "     " (first parts)))
+      (print (first parts))
       (doall (map #(print (str " " %)) (rest parts)))
       (println)))
 
@@ -90,7 +90,8 @@
      
 ;; Library Methods
 
-(def main-folder "musics")
+(def main-folder "main-music/mp3")
+(def main-foldero "main-music/ogg")
 
 (defn song-map [uri]
   (let [tag (get-tag uri)
@@ -109,12 +110,12 @@
      :chop '()
      :added (get-time)}))
 
-(defn song-difference [song1 song2]
+(defn song-diff [song1 song2]
   (let [vals1 (set (vals song1))
         vals2 (set (vals song2))
         vals1-vals2 (difference vals1 vals2)
         vals2-vals1 (difference vals2 vals1)]
-    (list (list vals1-vals2) (list vals2-vals1))))
+    (list vals1-vals2 vals2-vals1)))
 
 (defn make-playlist
   "Creates a (play)list of song-maps from the given folder."
@@ -147,38 +148,36 @@
 (defn -main 
   "Allows this program to be called by 'lein trampoline run'"
   [& args]
-  (println "Entering -main")
+  (pprint "Entering -main")
   (loop [input (read-line)]
     (if (= input "q")
-      (println "Exiting -main")
-      (do (println
+      (pprint "Exiting -main")
+      (do (pprint
            (try (eval (read-string input))
-                (catch Exception e (.printStackTrace e))))
+                (catch Exception e (.pprintStackTrace e))))
           (recur (read-line))))))
-
 
 ;; MongerDB interop
 
-(defn check-dupes [doc-name input]
+(defn print-store [doc-name input]
   (cond (seq? input)
-        (doall (map (partial check-dupes doc-name) input))
+        (doall (map (partial print-store doc-name) input))
         (map? input)
         (if (any? doc-name {:title (:title input)})
-          (println "Saved, but you just duplicated title: " (:title input))
-          (println "Saved: " (:title input)))))
+          (pprint (str "Saved, but you just duplicated title: " (:title input)))
+          (pprint (str "Saved: " (:title input))))))
 
 (defn store
-  "Stores the given playlist/song into document 'doc-name'"
+  "Stores the given playlist/song into document 'doc-name'. Takes a song-map,
+   uri, or list of song-maps. Returns WriteResults for each stored song."
   [doc-name input]
   (cond (map? input)
-        (do (check-dupes doc-name input)
+        (do (print-store doc-name input)
             (save doc-name input))
         (string? input)
-        (let [song (song-map input)]
-          (do (check-dupes doc-name song)
-              (save doc-name song)))
-        :else
-        (do (check-dupes doc-name input)
+        (store doc-name (song-map input))
+        (seq? input)
+        (do (print-store doc-name input)
             (insert-batch doc-name (vec input)))))
 
 (defn retrieve
@@ -190,18 +189,24 @@
        (find-maps doc-name {:title criteria})
        (find-maps doc-name criteria))))
 
+(defn print-delete [doc-name input]
+  (do (pprint (str "Deleted: " (count-db doc-name input) " copies matching:"))
+      (pprint input)))
+        
 (defn delete
-  "Removes A song, a LIST of songs, ALL songs, or simply those matching criteria"
+  "Removes A song, a LIST of songs, ALL songs, or simply those matching criteria.
+   Returns the WriteResult(s) in a list."
   ([doc-name] (del doc-name))
   ([doc-name input]
      (cond (seq? input)
            (doall (map (partial delete doc-name) input))
            (string? input)
-           (del doc-name (song-map input))
+           (delete doc-name {:title input})
            (map? input)
-           (del doc-name input))))
+           (do (print-delete doc-name input)
+               (del doc-name input)))))
 
-(defn count-list
+(defn count-db
   "Counts the number of entries in the given doc, overloaded for criteria"
   ([doc-name] (cnt doc-name))
   ([doc-name criteria] (cnt doc-name criteria)))
