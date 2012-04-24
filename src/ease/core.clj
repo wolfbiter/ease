@@ -15,10 +15,12 @@
  
 (connect!)
 (set-db! (get-db "ease"))
-(def ex "musics/mp3/Guilt.mp3")
-(def exo "musics/ogg/Guilt.ogg")
-(def prob "musics/mp3/OpenYourEyes.mp3")
-(def probo "musics/ogg/OpenYourEyes.ogg")
+(def ex "main-music/mp3/Guilt.mp3")
+(def exo "main-music/ogg/Guilt.ogg")
+(def prob "main-music/mp3/OpenYourEyes.mp3")
+(def probo "main-music/ogg/OpenYourEyes.ogg")
+(def main-folder "main-music/mp3")
+(def main-foldero "main-music/ogg")
 
 ;; ZMQ Ghost Function
 
@@ -28,70 +30,14 @@
       (doall (map #(print (str " " %)) (rest parts)))
       (println)))
 
-;; Clojure wrappers for jaudiotagger methods
+;; Clojure Jaudiotagger Interop
 
-(defn get-file [uri]
-  (-> (AudioFileIO/read (new File uri))))
-
-(defn get-tag [input]
-  (if (string? input)
-    (.getTag (get-file input))
-    (.getTag input)))
-
-(defn get-k [k tag]
-  (.getFirst tag k))
-
-(defn get-artist [tag]
-  (get-k FieldKey/ARTIST tag))
-
-(defn get-album [tag]
-  (get-k FieldKey/ALBUM tag))
-
-(defn get-title [tag]
-  (get-k FieldKey/TITLE tag))
-
-(defn get-track [tag]
-  (get-k FieldKey/TRACK tag))
-
-(defn get-bpm [tag]
-  (get-k FieldKey/BPM tag))
-
-(defn get-bitrate [input]
-  (if (string? input)
-  (-> (get-file input)
-      .getAudioHeader
-      .getBitRate)
-  (.getBitRate input)))
-
-(defn get-length [input]
-  (if (string? input)
-  (-> (get-file input)
-      .getAudioHeader
-      .getTrackLength)
-  (.getTrackLength input)))
+(defn get-tag [uri])
 
 (defn get-time []
   (.format
    (java.text.DateFormat/getInstance)
    (. (java.util.Calendar/getInstance) getTime)))
-
-(defn setartist [song text]
-  (doall (.setField (get-tag song) FieldKey/ARTIST text)
-         (.commit (get-file song))))
-
-(defn setalbum [song text]
-  (doall (.setField (get-tag song) FieldKey/ALBUM text)
-         (.commit (get-file song))))
-
-(defn setbpm [song text]
-  (let [f (get-file song)]
-    (.setField (.get-tag f) FieldKey/BPM text)
-    (.commit f)))
-     
-;; Library Methods
-
-(def main-folder "main-music/mp3")
-(def main-foldero "main-music/ogg")
 
 (defn song-map [uri]
   (let [tag (get-tag uri)
@@ -109,6 +55,8 @@
      :attributes #{}
      :chop '()
      :added (get-time)}))
+
+;; Library Methods
 
 (defn song-diff [song1 song2]
   (let [vals1 (set (vals song1))
@@ -136,6 +84,7 @@
   ([lvl channel] (send-command "vol" lvl channel)))
 
 (defn play
+  "Plays given song, uri, or playlist."
   ([input] (play input 0))
   ([input channel]
      (cond (map? input) 
