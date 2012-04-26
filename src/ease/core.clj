@@ -4,12 +4,13 @@
          :only [insert insert-batch find-maps remove save any? count]
          :rename {remove del count cnt}]
         [clojure.set :only [difference intersection]]
-        [clojure.pprint :only [pprint]])
-  (:import (org.jaudiotagger.audio AudioFileIO AudioFile))
-  (:import (org.jaudiotagger.audio.mp3 MP3AudioHeader MP3File))
-  (:import (org.jaudiotagger.tag FieldKey))
-  (:import (org.jaudiotagger.audio.generic AudioFileWriter))
-  (:import (java.io File BufferedReader)))
+        [clojure.pprint :only [pp pprint]]
+        [clojure.string :only [replace] :rename {replace replace-str}])
+  (:import (org.jaudiotagger.audio AudioFileIO AudioFile)
+           (org.jaudiotagger.audio.mp3 MP3AudioHeader MP3File)
+           (org.jaudiotagger.tag FieldKey)
+           (org.jaudiotagger.audio.generic AudioFileWriter)
+           (java.io File BufferedReader)))
 
 ;; For ease
  
@@ -30,24 +31,97 @@
       (doall (map #(print (str " " %)) (rest parts)))
       (println)))
 
-;; Clojure Jaudiotagger Interop
+;; Clojure Jaudiotagger Interop, with some spice.
 
-(defn get-tag [uri])
+(defn get-file [uri]
+  (if (string? uri)
+    (AudioFileIO/read (new File uri))
+    (AudioFileIO/read uri)))
+
+(defn get-tag [uri]
+  (.getTag (get-file uri)))
+
+(defn get-header [uri]
+  (.getAudioHeader (get-file uri)))
+
+(defn get-k [k tag]
+  (.getFirst tag k))
+
+(defn get-title [tag]
+  (get-k FieldKey/TITLE tag))
+
+(defn get-artist [tag]
+  (get-k FieldKey/ARTIST tag))
+
+(defn get-album [tag]
+  (get-k FieldKey/ALBUM tag))
+
+(defn get-track [tag]
+  (get-k FieldKey/TRACK tag))
+
+(defn get-bpm [tag]
+  (int (Double/valueOf (get-k FieldKey/BPM tag))))
+
+(defn get-genre [tag]
+  (get-k FieldKey/GENRE tag))
+
+(defn get-bitrate [header]
+    (.getBitRate header))
+
+(defn get-length [header]
+    (.getTrackLength header))
 
 (defn get-time []
   (.format
    (java.text.DateFormat/getInstance)
    (. (java.util.Calendar/getInstance) getTime)))
 
+(def viable-mods '("mix" "edit" "original" "extended" "rework" "bootleg"
+                   "feat" "with" "vocal" "instrumental"))
+
+(defn viable-mod? [string]
+  (if (nil? string)
+    false
+    (let [lower (.toLowerCase string)]
+      (not-every? false? (doall (map #(.contains lower %) viable-mods))))))
+
+(defn get-mod-title [tag]
+  (re-find #"\(.*\)" (get-title tag)))
+
+(defn get-mod-artist [tag]
+  (re-find #"\(.*\)" (get-artist tag)))
+
+(defn get-mod [tag]
+  (let [mod-title (get-mod-title tag)
+        mod-artist (get-mod-artist tag)]
+    (cond (viable-mod? mod-title) (.replaceAll mod-title "[()]" "")
+          (viable-mod? mod-artist) (.replaceAll mod-artist "[()]" "")
+          :else "")))
+
+(defn choose-title [tag]
+  (let [title (get-title tag)
+        mod-title (get-mod-title tag)]
+    (if (= mod-title nil)
+      title
+      (replace-str title mod-title ""))))
+
+(defn choose-artist [tag]
+  (let [artist (get-artist tag)
+        mod-artist (get-mod-artist tag)]
+    (if (= mod-artist nil)
+      artist
+      (replace-str artist mod-artist ""))))
+
 (defn song-map [uri]
   (let [tag (get-tag uri)
-        title (.trim (get-title tag))
-        header (.getAudioHeader (get-file uri))]
-    {:title title
+        header (get-header uri)
+        mod (get-mod tag)]
+    {:title (.trim (choose-title tag))
      :artist (get-artist tag)
-     :mod ""
+     :mod (get-mod tag)
      :album (get-album tag)
      :length (get-length header)
+     :genre (get-genre tag)
      :track (get-track tag)
      :bpm (get-bpm tag)
      :bitrate (get-bitrate header)
@@ -58,22 +132,28 @@
 
 ;; Library Methods
 
+(defn make-playlist
+  "Creates a (play)list of song-maps from the given folder and all subdirectories."
+  [folder]
+  (cond (string? folder)
+        (make-playlist (new File folder))
+        (= File (class folder))
+        (if (.isDirectory folder)
+          (let [uris (.list folder)
+                path (str folder "/")]
+            (flatten (map #(make-playlist (str path %)) uris)))
+          (song-map folder))))
+        
+
+(def main-music (make-playlist main-folder))
+(def main-musico (make-playlist main-foldero))
+
 (defn song-diff [song1 song2]
   (let [vals1 (set (vals song1))
         vals2 (set (vals song2))
         vals1-vals2 (difference vals1 vals2)
         vals2-vals1 (difference vals2 vals1)]
     (list vals1-vals2 vals2-vals1)))
-
-(defn make-playlist
-  "Creates a (play)list of song-maps from the given folder."
-  [folder]
-  (let [uris (.list (new File folder))
-        path (str folder "/")]
-    (for [uri uris]
-      (song-map (str path uri)))))
-
-(def main-music (make-playlist main-folder))
 
 (defn eq
   ([mode] (eq mode 0))
@@ -108,13 +188,18 @@
 
 ;; MongerDB interop
 
+(defn count-db
+  "Counts the number of entries in the given doc, overloaded for criteria"
+  ([doc-name] (cnt doc-name))
+  ([doc-name criteria] (cnt doc-name criteria)))
+
 (defn print-store [doc-name input]
   (cond (seq? input)
         (doall (map (partial print-store doc-name) input))
         (map? input)
         (if (any? doc-name {:title (:title input)})
-          (pprint (str "Saved, but you just duplicated title: " (:title input)))
-          (pprint (str "Saved: " (:title input))))))
+          (pprint (str "Stored, but you just duplicated title: " (:title input)))
+          (pprint (str "Stored: " (:title input))))))
 
 (defn store
   "Stores the given playlist/song into document 'doc-name'. Takes a song-map,
@@ -131,7 +216,7 @@
 
 (defn retrieve
   "Returns a (play)list of songs in given doc-name, the requested song, or all songs
-   in doc-name matching given criteria in the form of {:key1 value1 :key2 value2...}"
+   in doc-name matching given criteria in the form of {:key1 val1 :key2 val2...}"
   ([doc-name] (find-maps doc-name))
   ([doc-name criteria]
      (if (string? criteria)
@@ -154,8 +239,3 @@
            (map? input)
            (do (print-delete doc-name input)
                (del doc-name input)))))
-
-(defn count-db
-  "Counts the number of entries in the given doc, overloaded for criteria"
-  ([doc-name] (cnt doc-name))
-  ([doc-name criteria] (cnt doc-name criteria)))
