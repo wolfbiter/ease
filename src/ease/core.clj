@@ -5,7 +5,7 @@
          :rename {remove del count cnt}]
         [clojure.set :only [difference intersection]]
         [clojure.pprint :only [pp pprint]]
-        [clojure.string :only [replace] :rename {replace replace-str}])
+        [clojure.string :only [replace lower-case] :rename {replace replace-str}])
   (:import (org.jaudiotagger.audio AudioFileIO AudioFile)
            (org.jaudiotagger.audio.mp3 MP3AudioHeader MP3File)
            (org.jaudiotagger.tag FieldKey)
@@ -16,12 +16,8 @@
  
 (connect!)
 (set-db! (get-db "ease"))
-(def ex "main-music/mp3/Guilt.mp3")
-(def exo "main-music/ogg/Guilt.ogg")
-(def prob "main-music/mp3/OpenYourEyes.mp3")
-(def probo "main-music/ogg/OpenYourEyes.ogg")
-(def main-folder "main-music/mp3")
-(def main-foldero "main-music/ogg")
+(def ex "main-music/ogg/Guilt.ogg")
+(def main-folder "main-music/ogg")
 
 ;; ZMQ Ghost Function
 
@@ -42,7 +38,7 @@
   (.getTag (get-file uri)))
 
 (defn get-header [uri]
-  (.getAudioHeader (get-file uri)))
+    (.getAudioHeader (get-file uri)))
 
 (defn get-k [k tag]
   (.getFirst tag k))
@@ -70,6 +66,11 @@
 
 (defn get-length [header]
     (.getTrackLength header))
+
+(defn get-uri [uri]
+  (if (string? uri)
+    uri
+    (.getPath uri)))
 
 (defn get-time []
   (.format
@@ -119,13 +120,14 @@
     {:title (.trim (choose-title tag))
      :artist (get-artist tag)
      :mod (get-mod tag)
+     :plays 0
      :album (get-album tag)
      :length (get-length header)
      :genre (get-genre tag)
      :track (get-track tag)
      :bpm (get-bpm tag)
      :bitrate (get-bitrate header)
-     :uri uri
+     :uri (get-uri uri)
      :attributes #{}
      :chop '()
      :added (get-time)}))
@@ -146,7 +148,6 @@
         
 
 (def main-music (make-playlist main-folder))
-(def main-musico (make-playlist main-foldero))
 
 (defn song-diff [song1 song2]
   (let [vals1 (set (vals song1))
@@ -193,7 +194,9 @@
   ([doc-name] (cnt doc-name))
   ([doc-name criteria] (cnt doc-name criteria)))
 
-(defn print-store [doc-name input]
+(defn print-store
+  "Simple print statement that lists deletes."
+  [doc-name input]
   (cond (seq? input)
         (doall (map (partial print-store doc-name) input))
         (map? input)
@@ -203,7 +206,7 @@
 
 (defn store
   "Stores the given playlist/song into document 'doc-name'. Takes a song-map,
-   uri, or list of song-maps. Returns WriteResults for each stored song."
+   uri, or seq of song-maps. Returns WriteResults for each stored song."
   [doc-name input]
   (cond (map? input)
         (do (print-store doc-name input)
@@ -215,17 +218,31 @@
             (insert-batch doc-name (vec input)))))
 
 (defn retrieve
-  "Returns a (play)list of songs in given doc-name, the requested song, or all songs
-   in doc-name matching given criteria in the form of {:key1 val1 :key2 val2...}"
+  "Returns a (play)list of song(s) in given doc-name, the requested song, or all
+   songs in doc-name matching given criteria in the form of
+   {:key1 val1 :key2 val2...}"
   ([doc-name] (find-maps doc-name))
   ([doc-name criteria]
      (if (string? criteria)
        (find-maps doc-name {:title criteria})
        (find-maps doc-name criteria))))
 
-(defn print-delete [doc-name input]
-  (do (pprint (str "Deleted: " (count-db doc-name input) " copies matching:"))
-      (pprint input)))
+(defn safe-delete
+  "Prompts the user to make sure they REALLY want to do it...
+   'd' 'y' '<enter>' are shortcuts."
+  [doc-name input]
+  (do (println "Really delete"
+               (count-db doc-name input)
+               "song(s)? 'yes' 'details'")
+      (loop [response (lower-case (read-line))]
+        (cond (.contains response "n") nil
+              (or (= "" response) (.contains response "y"))
+              (do (println "Deleted all matches to:")
+                  (pprint input)
+                  (del doc-name input))
+              (.contains response "d")
+              (do (doall (map #(println %) (retrieve doc-name input)))
+                  (recur (lower-case (read-line))))))))
         
 (defn delete
   "Removes A song, a LIST of songs, ALL songs, or simply those matching criteria.
@@ -237,5 +254,4 @@
            (string? input)
            (delete doc-name {:title input})
            (map? input)
-           (do (print-delete doc-name input)
-               (del doc-name input)))))
+           (safe-delete doc-name input))))
