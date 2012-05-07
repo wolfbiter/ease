@@ -1,0 +1,10 @@
+(ns ease.views.welcome
+  (:require [ease.views.common :as common]
+            [noir.content.getting-started])
+  (:use [clojure.string :only [split-lines]]
+        [noir.core :only [defpage defpartial]]
+        [hiccup.core :only [html]]))
+
+(defpage "/" []
+  (common/layout
+   (html [:h1 "hi ease"])))
