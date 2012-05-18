@@ -15,4 +15,5 @@
     [:div.container
      content]
     [:script {:src "/js/jquery-1.7.2.js"}]
-    [:script {:src "/js/tabs.js"}]]))
+    [:script {:src "/js/tabs.js"}]
+    [:script {:src "/js/fixie_min.js"}]]))

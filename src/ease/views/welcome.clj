@@ -8,16 +8,17 @@
 (defpage "/" []
   (common/layout
    [:div.sixteen.columns
-    [:h1.remove-bottom {:style "text-align:center;"} "ease"]]
+    [:h1.remove-bottom {:style "text-align:center;"} "Ease"]]
    [:div.one-third.column
-    [:h3 "about ease"]
-    [:p "ease is an awesome music program"]]
+    [:h3.fixie]
+    [:blockquote
+     [:p.fixie]]]
    [:div.one-third.column
-    [:h3 "using ease"]
-    [:ol
-     [:li "start ease"]
-     [:li "???"]
-     [:li "PROFIT!"]]]
+    [:h3.fixie]
+    [:ol 
+     [:li.fixie]
+     [:li.fixie]
+     [:li.fixie]]]
    [:div.one-third.column
-    [:h3 "docs and support"]
-    [:p "none at this time"]]))
+    [:h3.fixie]
+    [:p.fixie]]))

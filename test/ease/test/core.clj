@@ -1,6 +1,8 @@
-(ns Ease.test.core
-  (:use [Ease.core])
-  (:use [clojure.test]))
+(ns ease.test.core
+  (:use [ease.core]
+        [ease.mongo]
+        [ease.song]
+        [ease.zmq]
+        [midje.sweet]))
 
-(deftest replace-me ;; FIXME: write
-  (is false "No tests have been written."))
+(fact (+ 2 2) => 5)
