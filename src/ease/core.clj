@@ -3,9 +3,11 @@
   (:use [ease.song]
         [ease.zmq]
         [ease.mongo]
+        [ease.dupes]
+        [ease.debug]
         [clojure.java.shell :only [sh]]
         [clojure.pprint :only [pp pprint]]
-        [clojure.string :only [replace lower-case] :rename {replace replace-str}]))
+        [clojure.string :only [lower-case]]))
 
 ;; For ease
 
@@ -34,6 +36,7 @@
 (def best (partial retrieve "best"))
 (def attr add-attribute)
 (def rm-attr remove-attribute)
+;(def get-attr get-attribute)
 
 (def five (lazy-seq (make-playlist "Best/5Stars")))
 (def four-half (lazy-seq (make-playlist "Best/4.5Stars")))
@@ -43,13 +46,33 @@
 (def o-source (lazy-seq (make-playlist "Best/OpenSource")))
 (def best-music (list five four-half four three-half three o-source))
 
-;; ZMQ Interface Function
+;; ZMQ Interface Functions
 
 (defn send-command
   "Sends a ZMQ multi-message to @addr with the given string arguments"
   [& parts]
   (let [msg (apply strs->msg parts)]
     (msg->strs (request-reply @client msg))))
+
+(defn get-readable-name [string]
+  (.replaceAll (re-find #"\$.*\@" string) "[@$]" ""))
+
+(defmacro new-command
+  "Creates a generic command that defaults selection of channel to 0.
+   num-extra-inputs refers to the desired number of inputs for the new command,
+   DISCLUDING the assumed channel."
+  [command-name num-extra-inputs]
+    `(defn ~command-name
+       [& inputs#]
+       (let [name# (get-readable-name (str ~command-name))
+             count# (count inputs#)]
+         (cond (= count# ~num-extra-inputs)
+               (apply send-command (flatten (list name# "0" inputs#)))
+               (= count# (+ 1 ~num-extra-inputs))
+               (apply send-command (flatten (list name# inputs#)))
+               :else
+               (println "No dice; I expected optional [channel] followed by"
+                        ~num-extra-inputs "inputs.")))))
 
 (defn print-command [& parts]
   (do (println "Sent command made with args below:")
@@ -59,35 +82,19 @@
 
 ;; Library Methods
 
-(defn eq
-  ([mode] (eq "0" mode))
-  ([channel mode] (send-command "eq" channel mode)))
+(new-command vol 1)     ; Changes the volume of channel to given double in range 0-1
 
-(defn vol
-  ([lvl] (vol "0" lvl))
-  ([channel lvl] (send-command "vol" channel lvl)))
+(new-command status 0)  ; Returns gstreamer status of channel
 
-(defn status
-  ([] (status "0"))
-  ([channel] (send-command "status" channel)))
+(new-command skip 0)    ; Skips to next song in queue
 
-(defn skip
-  ([] (skip "0"))
-  ([channel] (send-command "skip" channel)))
+(new-command length 0)  ; Returns current queue length
 
-(defn length
-  ([] (length "0"))
-  ([channel] (send-command "length" channel)))
+(new-command pause 0)    ; Pauses the channel
 
-(defn pause
-  "Pauses the channel"
-  ([] (pause "0"))
-  ([channel] (send-command "pause" channel)))
+(new-command stop 0)    ; Pauses the channel and removes all songs in that queue
 
-(defn stop
-  "Pauses the channel and removes all queued songs."
-  ([] (stop "0"))
-  ([channel] (send-command "stop" channel)))
+(new-command now-playing 0)    ; Returns uri of what's playing in channel
 
 (defn queue
   "Queues given song-map, uri, or playlist into given channel (default 0)."
@@ -103,7 +110,8 @@
 (defn play
   "Plays given input on given channel. Defaults to shorthand for playing shuffled
    best on channel 0."
-  ([] (do (queue "0" (shuffle (retrieve "best" :favorite)))
+  ([] (do (if (= 0 (length))
+            (queue "0" (shuffle (retrieve "best" :favorite))))
           (play "0")))
   ([input] (cond (string? input)
                  (send-command "play" input)
@@ -118,6 +126,8 @@
                (play channel)
                (doall (map #(queue channel %) (rest input)))))))
 
+;; Auxiliary
+
 (comment 
   (defn -main 
     "Allows this program to be called by 'lein trampoline run'"
@@ -130,5 +140,3 @@
              (try (eval (read-string input))
                   (catch Exception e (.pprintStackTrace e))))
             (recur (read-line)))))))
-
-;; Auxiliary

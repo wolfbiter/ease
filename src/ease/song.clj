@@ -5,13 +5,27 @@
 (ns ease.song
   (:require ease.config)
   (:use [clojure.string :only [replace lower-case] :rename {replace replace-str}]
-        [clojure.set :only [difference intersection]])
+        [clojure.set :only [difference intersection]]
+        [ease.debug])
   (:import (org.jaudiotagger.audio AudioFileIO AudioFile)
            (org.jaudiotagger.audio.mp3 MP3AudioHeader MP3File)
            (org.jaudiotagger.tag FieldKey)
            (org.jaudiotagger.audio.generic AudioFileWriter)
            (org.jaudiotagger.tag.datatype Artwork)
            (java.io File BufferedReader)))
+
+(def viable-mods '("remix" "mix" "edit" "original" "extended" "rework" "bootleg"
+                   "vocal" "instrumental"))
+
+(defn remove-mod [mod]
+  (let [edited (atom mod)]
+    (doall (map #(swap! edited replace-str % "") viable-mods))
+    @edited))
+
+(defn normalize
+  "Filters noise from given string so as to make more relevant matches."
+  [string]
+  (lower-case (.replace string " " "")))
 
 (defn get-file [uri]
   (if (string? uri)
@@ -76,9 +90,6 @@
    (java.text.DateFormat/getInstance)
    (. (java.util.Calendar/getInstance) getTime)))
 
-(def viable-mods '("mix" "edit" "original" "extended" "rework" "bootleg"
-                   "vocal" "instrumental"))
-
 (defn viable-mod? [string]
   (if (nil? string)
     false
@@ -100,7 +111,7 @@
         mod-artist (mod-artist-matches tag)]
     (cond (viable-mod? mod-title) (.trim (.replaceAll mod-title "[()-]" ""))
           (viable-mod? mod-artist) (.trim (.replaceAll mod-artist "[()-]" ""))
-          :else "")))
+          :else "Original Mix")))
 
 (defn choose-title [tag]
   (let [title (get-title tag)
@@ -118,21 +129,28 @@
 
 (defn song-map [uri]
   (let [tag (get-tag uri)
-        header (get-header uri)]
-    {:title (choose-title tag)
-     :artist (choose-artist tag)
-     :mod (get-mod tag)
-     :play-history '()
+        header (get-header uri)
+        time (get-time)
+        title (choose-title tag)
+        artist (choose-artist tag)
+        mod (get-mod tag)]
+    {:title title
+     :match [(normalize title) (remove-mod (normalize mod)) (normalize artist)]
+     :artist artist
+     :mod mod
+     :plays '[]
      :album (get-album tag)
      :length (get-length header)
      :genre (get-genre tag)
      :track (get-track tag)
      :bpm (get-bpm tag)
      :bitrate (get-bitrate header)
+     :attributes []
      :uri (get-uri uri)
-     :chop '()
-     :date-added (get-time)
-     :art (:art "art!")})) ;get-art tag)}))
+     :chop '[]
+     :date-added time
+     :edits []
+     :art "art!"})) ;(get-art tag)}))
 
 (defn make-playlist
   "Creates a (play)list of song-maps from the given folder and all
